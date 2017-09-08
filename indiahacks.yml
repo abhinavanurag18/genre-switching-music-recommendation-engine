@@ -1,0 +1,36 @@
+name: indiahacks
+channels:
+- defaults
+dependencies:
+- openssl=1.0.2l=0
+- pip=9.0.1=py36_1
+- python=3.6.2=0
+- readline=6.2=2
+- setuptools=27.2.0=py36_0
+- sqlite=3.13.0=0
+- tk=8.5.18=0
+- wheel=0.29.0=py36_0
+- xz=5.2.2=1
+- zlib=1.2.8=3
+- pip:
+  - backports.weakref==1.0rc1
+  - bleach==1.5.0
+  - click==6.7
+  - flask==0.12.2
+  - flask-pymongo==0.5.1
+  - html5lib==0.9999999
+  - itsdangerous==0.24
+  - jinja2==2.9.6
+  - markdown==2.6.8
+  - markupsafe==1.0
+  - numpy==1.13.1
+  - olefile==0.44
+  - pillow==4.2.1
+  - protobuf==3.3.0
+  - pymongo==3.5.0
+  - six==1.10.0
+  - tensorflow==1.2.1
+  - tflearn==0.3.2
+  - werkzeug==0.12.2
+prefix: /Applications/anaconda/envs/indiahacks
+
