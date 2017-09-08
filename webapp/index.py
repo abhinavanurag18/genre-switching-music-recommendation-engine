@@ -14,27 +14,42 @@ import tensorflow as tf
 import tflearn
 import numpy as np
 import random
+from bson.json_util import dumps
 
 app = Flask(__name__)
 
+
+#app configuration
 app.config['MONGO_DBNAME'] = 'restdb'
-app.config['MONGO_URI'] = 'mongodb://localhost:27017/restdb'
+#app.config['MONGO_URI'] = 'mongodb://localhost:27017/restdb'
+app.config['MONGO_URI'] = 'mongodb://mad_men:madmen111@ds127564.mlab.com:27564/songo'
 app.secret_key = 'F12Zr47j\3yX R~X@H!jmM]Lwf/,?KT'
 mongo = PyMongo(app)
 
+
+#app route - index
 @app.route('/')
 def index():
   if 'username' in session:
-    return render_template("index.html",username=session['username'],song="1MoAdVyuEuU")
+    return render_template("index.html",username=session['username'],song="1MoAdVyuEuU",genre="1")
   else:
     return render_template("login.html")
 
 @app.route('/<song>')
 def songplay(song):
   if 'username' in session:
-    return render_template("index.html",username=session['username'],song=song)
+    genre_id = get_genre_id_from_song_id(song)
+    return render_template("index.html",username=session['username'],song=song,genre=genre_id)
   else:
     return render_template("login.html")
+
+def get_genre_id_from_song_id(song_id):
+    all_songs = get_all_songs()
+    for song in all_songs["songs"]:
+        if song["song_id"] == song_id:
+            song_num = song["song_number"]
+            genre_id = (int(song_num) / 5) + 1
+            return genre_id
 
 @app.route('/logout')
 def logout():
@@ -59,13 +74,26 @@ def login():
 
   return render_template("index.html",username=session['username'], song="nYh-n7EOtMA")
 
+@app.route('/changegenre', methods=['GET'])
+def change_genre():
+    genre_id = request.args.get('genre','')
+    song_number = random.randrange(int(genre_id) * 5 - 4 , int(genre_id) * 5, 1)
+    all_songs = get_all_songs()
+    for song in all_songs["songs"]:
+        if song["song_number"] == str(song_number):
+            return song["song_id"]
+
+def get_all_songs():
+    star = mongo.db.songo.find()
+    print(type(star))
+    output = {}
+    for s in star:
+        output = {'songs' : s['songs']}
+    return output
+
 @app.route('/star', methods=['GET'])
 def get_all_stars():
-  star = mongo.db.stars
-  output = []
-  for s in star.find():
-    output.append({'name' : s['name'], 'distance' : s['distance']})
-  return jsonify({'result' : output})
+    return get_all_songs()
 
 @app.route('/star/', methods=['GET'])
 def get_one_star(name):
@@ -103,56 +131,62 @@ def automode():
 
 @app.route('/next-song', methods=['GET'])
 def nextsong():
-  song = request.args.get('songid','')
+    song = request.args.get('songid','')
+    print(song)
+    tf.reset_default_graph()
+    net = tflearn.input_data(shape=[None, 30])
+    net = tflearn.fully_connected(net, 60, activation='relu')
+    net = tflearn.fully_connected(net, 90, activation='relu')
+    net = tflearn.fully_connected(net, 12, activation='sigmoid')
+    net = tflearn.regression(net, optimizer='adam', loss='categorical_crossentropy')
+
+    model = tflearn.DNN(net)
+    model.load('users/'+session['username']+'/model_v1.tflearn')
+    song_from_db = get_all_songs()
+    genre = 0
+    length = 0
+    
+    for song_it in song_from_db["songs"]:
+        length = length + 1
+        if song_it["song_id"] == song:
+            # genre = song_it["song_number"]
+            genre = (int(song_it["song_number"]) % 5) + 1
+            print(genre)
+        
+
+
+    prev_to_prev_genre = ""
+    prev_length = 0
+    user_data = mongo.db.users.find()
+    for user_it in user_data:
+        if user_it["username"] == session["username"]:
+            print(user_it["username"])
+            prev_to_prev_genre = user_data["prev_genre"]
+            prev_length = user_data["length"]
   
-  tf.reset_default_graph()
-
-  net = tflearn.input_data(shape=[None, 30])
-  net = tflearn.fully_connected(net, 60, activation='relu')
-  net = tflearn.fully_connected(net, 90, activation='relu')
-  net = tflearn.fully_connected(net, 12, activation='sigmoid')
-  net = tflearn.regression(net, optimizer='adam', loss='categorical_crossentropy')
-
-  model = tflearn.DNN(net)
-  model.load('users/'+session['username']+'/model_v1.tflearn')
-  song_from_db = mongo.db.songs.find()
-  genre = 0
-  length = 0
-  for song_it in song_from_db:
-    length = length + 1
-    if song_it["song_id"] == song:
-      # genre = song_it["song_number"]
-      genre = (int(song_it["song_number"]) % 5) + 1
-
-
-  prev_to_prev_genre = ""
-  prev_length = 0
-  user_data = mongo.db.users.find()
-  for user_it in user_data:
-    if user_it["username"] == session["username"]:
-      prev_to_prev_genre = user_data["prev_genre"]
-      prev_length = user_data["length"]
-  
-  input_data_to_model = convert_to_one_hot_encoding(prev_to_prev_genre) + convert_to_one_hot_encoding_six(prev_length) + convert_to_one_hot_encoding(genre)
-  output_from_model = model.predict([input_data_to_model])
-  genre_returned = np.argmax(output_from_model)+1
-  user_data = mongo.db.users.find()
-  for user_it in user_data:
-    if genre == user_it["prev_genre"]:
-      user_data.update({"username":session["username"]},{"prev_genre":genre},{"$inc" : {"length":1}})
-    else :
-      user_data.update({"username":username},{"$set":{"prev_genre":genre,"length":1}})
+    input_data_to_model = convert_to_one_hot_encoding(prev_to_prev_genre) + convert_to_one_hot_encoding_six(prev_length) + convert_to_one_hot_encoding(genre)
+    output_from_model = model.predict([input_data_to_model])
+    genre_returned = np.argmax(output_from_model)+1
+    print(genre_returned)
+    user_data = mongo.db.users.find()
+    for user_it in user_data:
+        if genre == user_it["prev_genre"]:
+            user_data.update({"username":session["username"]},{"prev_genre":genre},{"$inc" : {"length":1}})
+        else :
+            user_data.update({"username":username},{"$set":{"prev_genre":genre,"length":1}})
   
 
-  song_number_played = random.randrange(genre_returned * 5 - 4 , genre_returned * 5, 1)
-  song_table = mongo.db.songs.find()
-  song_id = "1MoAdVyuEuU"
-  for song in song_table:
-    if song["song_number"] == song_number_played:
-      song_id = song["song_id"]
-      break
+    song_number_played = random.randrange(genre_returned * 5 - 4 , genre_returned * 5, 1)
+    print(song_number_played)
+    song_table = get_all_songs()
+    song_id = "1MoAdVyuEuU"
+    for song in song_table["songs"]:
+        print("inside this")
+        if song["song_number"] == str(song_number_played):
+            song_id = song["song_id"]
+            break
   # return str(input_data_to_model)
-  return render_template('index.html', username=session["username"],song=song_id)    
+    return render_template('index.html', username=session["username"],song=song_id,genre=genre_returned)    
 
 
 def convert_to_one_hot_encoding(number):
